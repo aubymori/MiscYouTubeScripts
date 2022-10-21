@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Comments Fix
-// @version      1.1.0
+// @version      1.1.1
 // @description  Fixes comments to be like how they used to be!
 // @author       Aubrey P.
 // @icon         https://www.youtube.com/favicon.ico
@@ -206,7 +206,7 @@ var commentObserver = new MutationObserver((list) => {
         if (mutation.addedNodes) {
             for (var i = 0; i < mutation.addedNodes.length; i++) {
                 var elm = mutation.addedNodes[i];
-                if (elm.classList && !elm.data.fixedByCF) {
+                if (elm.classList && elm.data && !elm.data.fixedByCF) {
                     if (elm.tagName == "YTD-COMMENT-THREAD-RENDERER") {
                         elm.data = await formatCommentThread(elm.data);
                         refreshData(elm);
