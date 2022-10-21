@@ -226,13 +226,3 @@ document.addEventListener("yt-page-data-updated", async (e) => {
         observingComments = true;
     }
 });
-
-document.addEventListener("DOMContentLoaded", function tmp() {
-    document.head.insertAdjacentHTML("beforeend", `<style>
-    /* Fix odd bug with highlighted reply */
-    #author-text.ytd-comment-renderer[hidden] {
-        display: block !important;
-    }
-    </style>`);
-    document.removeEventListener("DOMContentLoaded", tmp);
-});
