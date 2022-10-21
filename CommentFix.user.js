@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Comments Fix
-// @version      1.0.0
+// @version      1.1.0
 // @description  Fixes comments to be like how they used to be!
 // @author       Aubrey P.
 // @icon         https://www.youtube.com/favicon.ico
@@ -189,10 +189,14 @@ async function formatCommentThread(thread) {
 function refreshData(element) {
     var clone = element.cloneNode();
     clone.data = element.data;
+    // Let the script know we left our mark
+    // in a way that doesn't rely on classes
+    // because Polymer likes to cast comments
+    // into the fucking void for later reuse
+    clone.data.fixedByCF = true;
     for (var i in element.properties) {
         clone[i] = element[i];
     }
-    clone.classList.add("fixed-comment");
     element.insertAdjacentElement("afterend", clone);
     element.remove();
 }
@@ -202,7 +206,7 @@ var commentObserver = new MutationObserver((list) => {
         if (mutation.addedNodes) {
             for (var i = 0; i < mutation.addedNodes.length; i++) {
                 var elm = mutation.addedNodes[i];
-                if (elm.classList && !elm.classList.contains("fixed-comment")) {
+                if (elm.classList && !elm.data.fixedByCF) {
                     if (elm.tagName == "YTD-COMMENT-THREAD-RENDERER") {
                         elm.data = await formatCommentThread(elm.data);
                         refreshData(elm);
@@ -220,9 +224,5 @@ var commentObserver = new MutationObserver((list) => {
 
 document.addEventListener("yt-page-data-updated", async (e) => {
     hl = yt.config_.HL;
-
-    if (!observingComments) {
-        commentObserver.observe(document.querySelector("ytd-app"),  { childList: true, subtree: true });
-        observingComments = true;
-    }
+    commentObserver.observe(document.querySelector("ytd-app"),  { childList: true, subtree: true });
 });
