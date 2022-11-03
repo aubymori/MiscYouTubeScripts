@@ -12,13 +12,16 @@
 // @run-at       document-start
 // ==/UserScript==
 
+// Regex to isolate UCID from your videos item
+const VIDEOS_URL_REGEX = /(https:\/\/studio.youtube.com\/channel\/)|(\/videos)/g;
+
 const gfconfig = {
     homeToWhatToWatch: true,
-    myChannelGuideItem: true,
-    replaceExploreWithTrending: true,
+    addMyChannel: true,
+    addTrending: true,
     libraryAsGuideSectionTitle: true,
+    libraryFolderIcon: true,
     historyItemSignedOut: true,
-    noLibrarySignedOut: true,
     exploreSectionToBestOfYT: true,
     expandSubscriptionsSection: true,
     remove: {
@@ -26,6 +29,7 @@ const gfconfig = {
         yourVideos: true,
         yourClips: true,
         exploreSectionSignedIn: true,
+        librarySignedOut: true,
         moreFromYouTube: true,
         settingsSection: true,
         guideFooter: true
@@ -85,25 +89,27 @@ function isSignedIn() {
  */
 function getItemByIcon(sections, icon) {
     for (var i = 0; i < sections.length; i++) {
-        var section = sections[i].guideSectionRenderer.items;
-        for (var j = 0; j < section.length; j++) {
-            if (section[i].guideEntryRenderer) {
-                if (section[i].guideEntryRenderer.icon.iconType == icon) {
-                    return section[i];
-                }
-            } else if (section[i].guideCollapsibleSectionEntryRenderer) {
-                var colsection = section[i].guideCollapsibleSectionEntryRenderer.sectionItems;
-                for (var k = 0; k < colsection.length; k++) {
-                    if (colsection[k].guideEntryRenderer) {
-                        if (colsection[k].guideEntryRenderer.icon.iconType == icon) {
-                            return colsection[k];
+        if (sections[i].guideSectionRenderer?.items) {
+            var section = sections[i].guideSectionRenderer.items;
+            for (var j = 0; j < section.length; j++) {
+                if (section[j].guideEntryRenderer) {
+                    if (section[j].guideEntryRenderer?.icon?.iconType == icon) {
+                        return section[j];
+                    }
+                } else if (section[j]?.guideCollapsibleSectionEntryRenderer?.sectionItems) {
+                    var colsection = section[j].guideCollapsibleSectionEntryRenderer.sectionItems;
+                    for (var k = 0; k < colsection.length; k++) {
+                        if (colsection[k].guideEntryRenderer) {
+                            if (colsection[k].guideEntryRenderer?.icon?.iconType == icon) {
+                                return colsection[k];
+                            }
                         }
                     }
                 }
             }
         }
     }
-    return;
+    return "Could not find item";
 }
 
 /**
@@ -111,7 +117,7 @@ function getItemByIcon(sections, icon) {
  * 
  * @param {Node} element  Element to refresh data of.
  */
- function refreshData(element) {
+function refreshData(element) {
     var clone = element.cloneNode();
     clone.data = element.data;
     // Let the script know we left our mark
@@ -133,9 +139,6 @@ function getItemByIcon(sections, icon) {
  * @returns object
  */
 function modifyGuide(guide) {
-    console.dir(guide);
-    return;
-    
     if (gfconfig.remove.guideFooter) {
         waitForElm("#footer.ytd-guide-renderer").then((elm) => {
             elm.remove();
@@ -149,9 +152,82 @@ function modifyGuide(guide) {
         if (mainSection[i].guideEntryRenderer) {
             var item = mainSection[i].guideEntryRenderer;
 
+            if (item.icon.iconType == "WHAT_TO_WATCH" && gfconfig.homeToWhatToWatch) {
+                item.formattedTitle = {
+                    simpleText: getString("whatToWatch", yt.config_.HL)
+                };
+            }
+
             if (item.icon.iconType == "TAB_SHORTS" && gfconfig.remove.shorts) {
                 mainSection.splice(i, 1);
                 i--;
+            }
+
+            if (item.icon.iconType == "SUBSCRIPTIONS") {
+                if (gfconfig.addMyChannel && isSignedIn()) {
+                    var yourVideos = getItemByIcon(sections, "MY_VIDEOS");
+                    var ucid = yourVideos.guideEntryRenderer.navigationEndpoint.urlEndpoint.url.replace(VIDEOS_URL_REGEX, "");
+
+                    mainSection.splice(i, 0, {
+                        guideEntryRenderer: {
+                            navigationEndpoint: {
+                                clickTrackingParams: "CBwQtSwYASITCNqYh-qO_fACFcoRrQYdP44D9Q==",
+                                commandMetadata: {
+                                    webCommandMetadata: {
+                                        url: "/channel/" + ucid,
+                                        webPageType: "WEB_PAGE_TYPE_CHANNEL",
+                                        rootVe: 6827,
+                                        apiUrl: "/youtubei/v1/browse"
+                                    }
+                                },
+                                browseEndpoint: {
+                                    browseId: ucid
+                                }
+                            },
+                            icon: {
+                                iconType: "ACCOUNT_CIRCLE"
+                            },
+                            trackingParams: "CBwQtSwYASITCNqYh-qO_fACFcoRrQYdP44D9Q==",
+                            formattedTitle: {
+                                simpleText: getString("myChannel", yt.config_.HL)
+                            },
+                            accessibility: {
+                                accessibilityData: {
+                                    label: getString("myChannel", yt.config_.HL)
+                                }
+                            }
+                        }
+                    });
+                    i++;
+                }
+
+                if (gfconfig.addTrending) {
+                    mainSection.splice(i, 0, getItemByIcon(sections, "TRENDING"));
+                    i++;
+                }
+                
+                if (gfconfig.historyItemSignedOut && !isSignedIn()) {
+                    mainSection[i] = getItemByIcon(sections, "WATCH_HISTORY");
+                }
+            }
+        } else if (mainSection[i].guideCollapsibleSectionEntryRenderer) {
+            if (gfconfig.remove.librarySignedOut && !isSignedIn()) {
+                mainSection.splice(i, 1);
+            }
+
+            var librarySection = mainSection[i].guideCollapsibleSectionEntryRenderer;
+            if (gfconfig.libraryFolderIcon) {
+                librarySection.headerEntry.guideEntryRenderer.icon.iconType = "FOLDER";
+            }
+
+            for (var j = 0; j < librarySection.sectionItems.length; j++) {
+                var item = librarySection.sectionItems[j].guideEntryRenderer;
+
+                if ((item.icon.iconType == "MY_VIDEOS" && gfconfig.remove.yourVideos)
+                 || (item.icon.iconType == "CONTENT_CUT" && gfconfig.remove.yourClips)) {
+                    librarySection.sectionItems.splice(j, 1);
+                    j--;
+                 }
             }
         }
     }
@@ -177,11 +253,14 @@ async function waitForElm(selector, base = document) {
     return base.querySelector(selector);
 };
 
-var mo = new MutationObserver(function(list) {
-    list.forEach((mutation) => {
+var mo = new MutationObserver(list => {
+    list.forEach(async mutation => {
         if (mutation.addedNodes) {
             for (var i = 0; i < mutation.addedNodes.length; i++) {
                 if (mutation.addedNodes[i].tagName == "YTD-GUIDE-RENDERER") {
+                    while (typeof mutation.addedNodes[i].data != "object") {
+                        await new Promise(r => requestAnimationFrame(r));
+                    }
                     modifyGuide(mutation.addedNodes[i]);
                     mo.disconnect();
                 }
